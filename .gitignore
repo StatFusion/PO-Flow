@@ -1,0 +1,8 @@
+# Ignore Bayesian Logistics results
+NN_params/
+
+results/
+
+Counterfactual_Face_Images_Generation/CelebA/latent_dataset/
+
+others.py

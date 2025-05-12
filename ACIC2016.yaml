@@ -1,0 +1,12 @@
+data:
+  name: 'ACIC2016'
+  Ydim: 1
+
+training:
+  epochs: 310
+  batch_size: 1000
+
+test:
+  epochs: 10
+  if_test_KL_metric: False # Notice that testing KL metric can be time-demanding
+  KL_metric_epoch: 400
