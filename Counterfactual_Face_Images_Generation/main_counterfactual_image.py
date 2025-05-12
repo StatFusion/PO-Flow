@@ -252,7 +252,7 @@ if __name__ == "__main__":
             recon = recon_flat.view(T1, N, 3, 128, 128)      # [T1, N, 3, H, W]
 
             if epoch + 1 == epochs:
-                save_dir = "/storage/home/hcoda1/3/dwu381/p-yxie77-0/CounterFactual_Flow/dataset/CelebA/test_results"
+                save_dir = "counterfactual_results"
                 for i in range(N):
                     for j in range(T1):
                         img = recon[j, i]
