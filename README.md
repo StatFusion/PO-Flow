@@ -64,10 +64,12 @@ datasets/      processed scalar benchmark datasets
 ## Citation
 
 ```bibtex
-@article{wu2025flow,
-  title   = {Flow-based Generative Modeling of Potential Outcomes and Counterfactuals},
-  author  = {Wu, Dongze and Inouye, David I. and Xie, Yao},
-  journal = {arXiv preprint arXiv:2505.16051},
-  year    = {2025}
+@inproceedings{wu2026flow,
+  title        = {Flow-based generative modeling of potential outcomes and counterfactuals},
+  author       = {Wu, Dongze and Xie, Yao and Inouye, David I.},
+  booktitle    = {2026 IEEE International Symposium on Information Theory (ISIT)},
+  pages        = {1--6},
+  year         = {2026},
+  organization = {IEEE}
 }
 ```
