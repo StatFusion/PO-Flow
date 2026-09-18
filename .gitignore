@@ -1,8 +1,68 @@
-# Ignore Bayesian Logistics results
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Training artifacts (the release keeps only compact aggregate provenance)
 NN_params/
-
 results/
+*.log
+slurm-*.out
+additional_baselines_slurm_*.log
 
+# Large/source datasets that can be regenerated locally. The frozen processed
+# vector archives used by the final configs are intentionally versioned.
+multidim_benchmarks/raw/
 Counterfactual_Face_Images_Generation/CelebA/latent_dataset/
 
-others.py
+# Canonical final configs live only under configs/. These are redundant legacy
+# copies or generated search configurations.
+/*_IPW.yaml
+/multidim_benchmarks/configs/
+
+# Hyperparameter-search and one-off analysis drivers retained only in the local
+# research worktree; they are not required to reproduce the frozen release.
+/tune_ipw.py
+/run_architecture_v2.py
+/run_optimization_v3.py
+/run_image_full_validation.py
+/run_multidim_sweep.sh
+/finalize_architecture_v2.py
+/finalize_optimization_v3.py
+/build_architecture_v2_repro_manifest.py
+/build_optimization_v3_repro_manifest.py
+/build_final_ipw_results.py
+/compare_architecture_v2_baselines.py
+/summarize_IPW_results.py
+/summarize_multidim_results.py
+
+# Local paper/review material is maintained in separate repositories.
+/overleaf-jsait/
+/overleaf-jsait-wrong-*/
+/jsait_paper/
+/advisor_reports/
+/references/
+/PO_Flow_JSAIT_*.zip
+/JSAIT_IEEE_one_column_template.pdf
+/JSAIT_JOURNAL_EXTENSION.md
+/JSAIT_REVIEW_AUDIT_*.md
+/IPW_DESIGN.md
+/IPW_EXPERIMENT_REPORT.md
+/IPW_FINAL_RESULTS.md
+/MULTIDIM_BASELINE_RESULTS.md
+/MULTIDIM_FINAL_RESULTS.md
+/ADDITIONAL_BASELINE_RESULTS.md
+/ARCHITECTURE_V2_FINAL_RESULTS.md
+/OPTIMIZATION_V3_FINAL_RESULTS.md
+/CFRNET_ALIGNMENT_AUDIT.md
+
+# Historical local utilities
+/others.py
+/check.py

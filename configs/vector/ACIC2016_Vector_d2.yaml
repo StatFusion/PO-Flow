@@ -1,0 +1,54 @@
+# CANONICAL FINAL CONFIG — ACIC16-Vector dY=2 PO-Flow+IPW (paper seeds 42--46).
+# GPU login/setup (deanonymized):
+#   ssh atl1-1-02-007-31-0
+#   module load anaconda3/2022.05
+#   conda activate /storage/home/hcoda1/3/dwu381/r-yxie77-0/dongze
+#   cd /storage/home/hcoda1/3/dwu381/r-yxie77-0/PO_Flow
+# Run the five final seeds:
+#   python run_tuned_ipw.py run --datasets ACIC2016_Vector_d2 --seeds 42,43,44,45,46 --jobs 1
+# Single-seed direct call:
+#   python main_multidim.py --config /storage/home/hcoda1/3/dwu381/r-yxie77-0/PO_Flow/configs/vector/ACIC2016_Vector_d2.yaml --run-name FinalIPW_ACIC2016_Vector_d2_seed42 --seed 42 --device cuda
+
+seed: 42
+data:
+  name: ACIC2016_Vector_d2
+  archive: multidim_benchmarks/processed/acic2016_vector_d2.npz
+  image_scale: false
+  standardize_x: true
+training:
+  epochs: 310
+  batch_size: 256
+  learning_rate: 0.0005
+  hidden_dim: 128
+  swa_start_fraction: 0.75
+  log_every: 25
+  architecture: time_residual
+  core_width: 192
+  depth: 3
+  time_embedding_dim: 32
+  residual_expansion: 2
+  dropout: 0.0
+  head_mode: separate
+  optimizer: adamw
+  weight_decay: 1.0e-05
+  scheduler: cosine
+  minimum_learning_rate: 1.0e-05
+  max_grad_norm: 5.0
+  mean_aux_strength: 1.0
+  use_auxiliary_means: true
+ipw:
+  model: logistic
+  crossfit_folds: 5
+  calibration: none
+  propensity_clip: 0.01
+  stabilized: false
+  normalize: true
+  arm_normalize: false
+  weight_clip_quantile: 0.95
+  weight_clip_max: null
+  ipw_strength: 0.75
+evaluation:
+  samples: 100
+  batch_size: 256
+  ode_steps: 100
+  sliced_wasserstein_projections: 200

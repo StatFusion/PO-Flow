@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-import ot
 import pandas as pd
 
 class RealBaseDataset(Dataset):
@@ -114,9 +113,25 @@ def wasserstein_dist(x: torch.Tensor, y: torch.Tensor, k: int = 1) -> float:
         y_np = y_np[:, None]
 
     n, m = x_np.shape[0], y_np.shape[0]
+    # Every PO-Flow experiment currently compares equally sized empirical
+    # distributions of a scalar outcome.  In one dimension the monotone
+    # coupling is optimal, giving an exact W_k without an external OT solver.
+    if x_np.shape[1] == 1 and y_np.shape[1] == 1 and n == m:
+        differences = np.abs(np.sort(x_np[:, 0]) - np.sort(y_np[:, 0])) ** k
+        return float(np.mean(differences) ** (1.0 / k))
+
+    # Retain the original POT implementation for unequal sample counts or
+    # multivariate outcomes, but avoid making POT a mandatory import merely to
+    # train the model or use the exact univariate path above.
+    try:
+        import ot
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "POT is required for multivariate or unequal-size Wasserstein distances; "
+            "install it with `pip install POT`."
+        ) from error
     a = np.ones(n) / n
     b = np.ones(m) / m
     M = ot.dist(x_np, y_np, metric='euclidean') ** k  # shape (n, m)
     wasserstein_cost = ot.emd2(a, b, M)
     return wasserstein_cost ** (1.0 / k)
-

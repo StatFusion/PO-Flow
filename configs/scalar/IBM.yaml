@@ -1,0 +1,44 @@
+# CANONICAL FINAL CONFIG — scalar IBM PO-Flow+IPW (paper seeds 42--46).
+# GPU login/setup (deanonymized):
+#   ssh atl1-1-02-007-31-0
+#   module load anaconda3/2022.05
+#   conda activate /storage/home/hcoda1/3/dwu381/r-yxie77-0/dongze
+#   cd /storage/home/hcoda1/3/dwu381/r-yxie77-0/PO_Flow
+# Run the five final seeds (training plus the paper's 100-draw evaluation):
+#   python run_tuned_ipw.py run --datasets IBM --seeds 42,43,44,45,46 --jobs 1
+# Single-seed direct training call (evaluation is performed by the runner above):
+#   python main_IPW.py --PO_Flow_config /storage/home/hcoda1/3/dwu381/r-yxie77-0/PO_Flow/configs/scalar/IBM.yaml --run-name FinalIPW_IBM_seed42 --seed 42 --device cuda --test-epochs 270 --eval-samples 1 --log-every 270
+
+data:
+  name: IBM
+  Ydim: 1
+
+training:
+  # The validation-selected wide challenger failed formal non-inferiority, so
+  # the final paper configuration retains the q=.95, alpha=1 IPW incumbent.
+  epochs: 270
+  batch_size: 200
+  learning_rate: 0.001
+  hidden_dim: 128
+  swa_start_fraction: 0.8
+
+ipw:
+  model: logistic
+  crossfit_folds: 5
+  calibration: none
+  propensity_clip: 0.01
+  stabilized: false
+  normalize: true
+  arm_normalize: false
+  weight_clip_quantile: 0.95
+  weight_clip_max: null
+  ipw_strength: 1.0
+  seed: 42
+
+test:
+  epochs: 270
+  PO_samples: 1
+  ODE_steps: 100
+  if_test_KL_metric: false
+  KL_metric_epoch: 270
+  KL_samples: 100

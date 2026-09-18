@@ -1,0 +1,54 @@
+# CANONICAL FINAL CONFIG — MorphoMNIST-Intensity dY=784 PO-Flow+IPW (paper seeds 42--46).
+# GPU login/setup (deanonymized):
+#   ssh atl1-1-02-007-31-0
+#   module load anaconda3/2022.05
+#   conda activate /storage/home/hcoda1/3/dwu381/r-yxie77-0/dongze
+#   cd /storage/home/hcoda1/3/dwu381/r-yxie77-0/PO_Flow
+# Run the five final seeds:
+#   python run_tuned_ipw.py run --datasets MorphoMNIST_Intensity_d784 --seeds 42,43,44,45,46 --jobs 1
+# Single-seed direct call:
+#   python main_multidim.py --config /storage/home/hcoda1/3/dwu381/r-yxie77-0/PO_Flow/configs/vector/MorphoMNIST_Intensity_d784.yaml --run-name FinalIPW_MorphoMNIST_Intensity_d784_seed42 --seed 42 --device cuda
+
+seed: 42
+data:
+  name: MorphoMNIST_Intensity_d784
+  archive: multidim_benchmarks/processed/morphomnist_intensity_d784.npz
+  image_scale: true
+  standardize_x: true
+training:
+  epochs: 200
+  batch_size: 128
+  learning_rate: 0.00012
+  hidden_dim: 1024
+  swa_start_fraction: 0.75
+  log_every: 20
+  architecture: time_residual
+  core_width: 512
+  depth: 3
+  time_embedding_dim: 32
+  residual_expansion: 2
+  dropout: 0.0
+  head_mode: separate
+  optimizer: adamw
+  weight_decay: 1.0e-05
+  scheduler: cosine
+  minimum_learning_rate: 1.0e-05
+  max_grad_norm: 5.0
+  mean_aux_strength: 0.0
+  use_auxiliary_means: false
+ipw:
+  model: logistic
+  crossfit_folds: 5
+  calibration: none
+  propensity_clip: 0.01
+  stabilized: false
+  normalize: true
+  arm_normalize: false
+  weight_clip_quantile: 0.95
+  weight_clip_max: null
+  ipw_strength: 0.5
+evaluation:
+  samples: 20
+  batch_size: 128
+  ode_steps: 50
+  sliced_wasserstein_projections: 100

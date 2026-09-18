@@ -1,0 +1,11 @@
+{
+  "name": "IHDP-Vector",
+  "construction": "Stack the first d CEVAE/NPCI IHDP replications; all share X and A.",
+  "dimension": 5,
+  "source": "https://github.com/AMLab-Amsterdam/CEVAE/tree/master/datasets/IHDP/csv",
+  "seed": 42,
+  "n": 747,
+  "x_dim": 25,
+  "archive": "ihdp_vector_d5.npz",
+  "sha256": "fa062b6279dd261c783397ed4cc71a6a5b7b6848dabad4556443fa459cb6b525"
+}

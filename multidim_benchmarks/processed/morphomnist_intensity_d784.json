@@ -1,0 +1,12 @@
+{
+  "name": "MorphoMNIST-Intensity",
+  "construction": "Shared handwriting shape with binary do(intensity=110 or 220) potential images.",
+  "dimension": 784,
+  "source": "https://github.com/gulnazaki/counterfactual-benchmark/tree/main/counterfactual_benchmark/datasets/morphomnist",
+  "seed": 42,
+  "n": 70000,
+  "x_dim": 11,
+  "storage": "Y arrays are uint8 and are scaled to [-1,1] by the training loader.",
+  "archive": "morphomnist_intensity_d784.npz",
+  "sha256": "2f00e22b6267e361fcdf3552f471999dffeb7f75aa02ed2a67acf6d8dc28ef0d"
+}

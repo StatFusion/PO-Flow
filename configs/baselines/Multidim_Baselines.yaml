@@ -1,0 +1,63 @@
+# CANONICAL FINAL CONFIG — CFR, GANITE, and CEVAE vector/image adaptations.
+# GPU login/setup (deanonymized):
+#   ssh atl1-1-02-007-31-0
+#   module load anaconda3/2022.05
+#   conda activate /storage/home/hcoda1/3/dwu381/r-yxie77-0/dongze
+#   cd /storage/home/hcoda1/3/dwu381/r-yxie77-0/PO_Flow
+# Complete restart-safe five-seed sweep:
+#   bash run_multidim_baselines.sh
+# Single-run example:
+#   python multidim_baselines.py --config configs/vector/IHDP_Vector_d5.yaml --baseline-config configs/baselines/Multidim_Baselines.yaml --method cfr --device cuda --seed 42 --run-name IHDP_Vector_d5_CFR_seed42
+
+baselines:
+  cfr:
+    balance_strength: 0.1
+    log_every: 20
+    tabular:
+      epochs: 120
+      batch_size: 512
+      hidden_dim: 256
+      learning_rate: 0.001
+    image:
+      epochs: 30
+      batch_size: 512
+      hidden_dim: 512
+      learning_rate: 0.0005
+  ganite:
+    adversarial_strength: 0.02
+    log_every: 20
+    tabular:
+      epochs: 120
+      batch_size: 128
+      hidden_dim: 256
+      learning_rate: 0.001
+    image:
+      epochs: 30
+      batch_size: 512
+      hidden_dim: 512
+      learning_rate: 0.0005
+  cevae:
+    beta_kl: 0.1
+    x_reconstruction_weight: 0.1
+    log_every: 20
+    tabular:
+      epochs: 120
+      batch_size: 512
+      hidden_dim: 256
+      learning_rate: 0.001
+      z_dim: 32
+    image:
+      epochs: 30
+      batch_size: 512
+      hidden_dim: 512
+      learning_rate: 0.0005
+      z_dim: 64
+  evaluation:
+    tabular:
+      batch_size: 512
+      sliced_wasserstein_projections: 200
+      cevae_samples: 20
+    image:
+      batch_size: 256
+      sliced_wasserstein_projections: 100
+      cevae_samples: 5

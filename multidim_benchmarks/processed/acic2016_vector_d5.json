@@ -1,0 +1,11 @@
+{
+  "name": "ACIC2016-Vector",
+  "construction": "Fix replication-1 A; stack Y(0),Y(1) surfaces from the first d replications.",
+  "dimension": 5,
+  "source": "https://github.com/BiomedSciAI/causallib/tree/master/causallib/datasets/data/acic_challenge_2016",
+  "seed": 42,
+  "n": 4802,
+  "x_dim": 82,
+  "archive": "acic2016_vector_d5.npz",
+  "sha256": "692d43743904ba265d3ec235c951109ef07547ee70b8582021d2b7038ac8e828"
+}

@@ -18,6 +18,7 @@ import yaml
 from argparse import Namespace
 import gc
 from utils import CounterfactualDatasetBuilder, wasserstein_dist
+import time
 
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -108,6 +109,146 @@ class FlowMatchingNet(nn.Module):
         v1 = self.prediction_v1(hidden)
         return v0, v1
 
+
+class SinusoidalTimeEmbedding(nn.Module):
+    """Deterministic Fourier features for continuous flow time in [0, 1]."""
+
+    def __init__(self, dimension=32, max_frequency=8.0):
+        super().__init__()
+        if dimension < 2:
+            raise ValueError("time embedding dimension must be at least 2")
+        self.dimension = int(dimension)
+        # Reserve one coordinate for raw time.  Pure periodic features can
+        # otherwise alias the ODE endpoints (t=0 and t=1), especially for a
+        # small embedding whose sampled frequencies happen to be integers.
+        half = (self.dimension - 1) // 2
+        frequencies = torch.exp(
+            torch.linspace(0.0, math.log(float(max_frequency)), half)
+        )
+        self.register_buffer("frequencies", frequencies)
+
+    def forward(self, time):
+        time = time.reshape(-1, 1)
+        angles = 2.0 * math.pi * time * self.frequencies.reshape(1, -1)
+        embedding = torch.cat((time, torch.sin(angles), torch.cos(angles)), dim=1)
+        if embedding.shape[1] < self.dimension:
+            embedding = F.pad(embedding, (0, self.dimension - embedding.shape[1]))
+        return embedding
+
+
+class TimeConditionedResidualBlock(nn.Module):
+    """Pre-normalized residual MLP with context-dependent scale and shift."""
+
+    def __init__(self, width, expansion=2, dropout=0.0):
+        super().__init__()
+        expanded = int(width * expansion)
+        if expanded <= 0:
+            raise ValueError("residual expansion must be positive")
+        self.normalization = nn.LayerNorm(width)
+        self.modulation = nn.Linear(width, 2 * width)
+        self.input_projection = nn.Linear(width, expanded)
+        self.output_projection = nn.Linear(expanded, width)
+        self.dropout = nn.Dropout(float(dropout))
+
+    def forward(self, state, context):
+        scale, shift = self.modulation(context).chunk(2, dim=1)
+        hidden = self.normalization(state)
+        hidden = hidden * (1.0 + 0.1 * torch.tanh(scale)) + shift
+        hidden = F.silu(self.input_projection(hidden))
+        hidden = self.output_projection(self.dropout(hidden))
+        return (state + hidden) / math.sqrt(2.0)
+
+
+class TimeConditionedFlowMatchingNet(nn.Module):
+    """Higher-capacity, explicitly time-dependent PO-Flow vector field.
+
+    Unlike the legacy network, the residual width is independent of x_dim and
+    ``hidden_dim``.  Continuous time, covariates, and treatment enter every
+    residual block through a learned context.  The two arm heads preserve the
+    public PO-Flow interface used by the ODE and evaluation routines.
+    """
+
+    def __init__(
+        self,
+        y_dim=1,
+        x_dim=177,
+        core_width=192,
+        depth=3,
+        time_dim=32,
+        expansion=2,
+        dropout=0.0,
+        head_mode="separate",
+    ):
+        super().__init__()
+        if core_width <= 0 or depth <= 0:
+            raise ValueError("core_width and depth must be positive")
+        self.y_dim = int(y_dim)
+        self.x_dim = int(x_dim)
+        self.hidden_dim = int(core_width)
+        self.core_width = int(core_width)
+        self.depth = int(depth)
+        self.head_mode = str(head_mode)
+        if self.head_mode not in {"separate", "shared"}:
+            raise ValueError("head_mode must be 'separate' or 'shared'")
+        self.time_embedding = SinusoidalTimeEmbedding(time_dim)
+        context_input = self.x_dim + 1 + int(time_dim)
+        self.context_encoder = nn.Sequential(
+            nn.Linear(context_input, self.core_width),
+            nn.SiLU(),
+            nn.Linear(self.core_width, self.core_width),
+            nn.SiLU(),
+        )
+        self.y_projection = nn.Linear(self.y_dim, self.core_width)
+        self.residual_layers = nn.ModuleList(
+            TimeConditionedResidualBlock(self.core_width, expansion, dropout)
+            for _ in range(self.depth)
+        )
+        self.final_normalization = nn.LayerNorm(self.core_width)
+        def prediction_head():
+            return nn.Sequential(
+                nn.Linear(self.core_width, self.core_width),
+                nn.SiLU(),
+                nn.Linear(self.core_width, self.y_dim),
+            )
+
+        if self.head_mode == "shared":
+            # Treatment already conditions the context at every residual
+            # block.  A shared terminal map transfers statistical strength
+            # across arms and avoids encoding treatment twice.
+            self.prediction_shared = prediction_head()
+        else:
+            self.prediction_v0 = prediction_head()
+            self.prediction_v1 = prediction_head()
+
+    def forward(self, y, t, a, x):
+        if a.dim() == 1:
+            a = a.unsqueeze(1)
+        time_features = self.time_embedding(t.to(dtype=y.dtype))
+        context = self.context_encoder(torch.cat((x, a.to(dtype=x.dtype), time_features), dim=1))
+        state = self.y_projection(y) + context
+        for block in self.residual_layers:
+            state = block(state, context)
+        state = F.silu(self.final_normalization(state))
+        if self.head_mode == "shared":
+            velocity = self.prediction_shared(state)
+            return velocity, velocity
+        return self.prediction_v0(state), self.prediction_v1(state)
+
+    def auxiliary_mean(self, x, a):
+        """Reuse the velocity network as a parameter-free conditional-mean readout.
+
+        Time ``-1`` is outside the flow interval and therefore acts as an
+        unambiguous task token. The readout introduces no new trainable
+        parameters: it uses the same context encoder, residual backbone, and
+        treatment-specific terminal heads as the velocity field.
+        """
+        if a.dim() == 1:
+            a = a.unsqueeze(1)
+        y = torch.zeros((x.shape[0], self.y_dim), dtype=x.dtype, device=x.device)
+        task_time = -torch.ones((x.shape[0], 1), dtype=x.dtype, device=x.device)
+        mean_0, mean_1 = self.forward(y, task_time, a, x)
+        return torch.where(a == 0, mean_0, mean_1)
+
     
 
 def train_flow_matching(model, dataloader, optimizer, device, propnet=None):
@@ -178,7 +319,7 @@ def divergence_approx(v, y, e_ls, t, net):
     """
     approx_tr = []
     for e in e_ls:
-        sigma = 0.01 / torch.sqrt(torch.tensor(y.numel(), dtype=torch.float32))
+        sigma = 0.01 / torch.sqrt(y.new_tensor(y.numel(), dtype=torch.float32))
         v_e = net(y + sigma * e, t)
         e_dvdy = (v_e - v) / sigma
         approx_tr.append((e_dvdy * e).view(e.shape[0], -1).sum(dim=1, keepdim=True))
@@ -192,21 +333,22 @@ def flow_to_sample(model, y0, a, x, device, train=True, nll=False, num_steps=50,
     """
     s = torch.linspace(0, 1, num_steps, device=device)
     N = y0.shape[0]
+    y_dim = model.y_dim
     a = a.view(N, 1)
     x = x.view(N, -1)
 
     if train:
         # same as before
         def ode_func(t_scalar, y_flat):
-            y = y_flat.view(N,1)
+            y = y_flat.view(N, y_dim)
             tt = torch.full((N,1), 1 - t_scalar.item(), device=device)
             v0, v1 = model(y, tt, a, x)
             v = torch.where(a==0, v0, v1)
             return -v.view(-1)
 
         y0_flat = y0.view(-1)
-        y_traj = odeint(ode_func, y0_flat, s, method='dopri5')
-        return y_traj[-1].view(N,1)
+        y_traj = odeint(ode_func, y0_flat, s, method='rk4')
+        return y_traj[-1].view(N, y_dim)
 
     if not nll:
         model.eval()
@@ -216,12 +358,12 @@ def flow_to_sample(model, y0, a, x, device, train=True, nll=False, num_steps=50,
                 v0, v1 = model(y, t_tensor, a, x)
                 v = torch.where(a==0, v0, v1)
                 return -v
-            y_traj = odeint(ode_func, y0, s, method='dopri5')
+            y_traj = odeint(ode_func, y0, s, method='rk4')
         return y_traj[-1]
 
     model.eval()
-    y_flat = y0.clone().detach().view(N,1).requires_grad_(True)
-    logp_flat = -0.5 * (y_flat**2 + math.log(2*math.pi))
+    y_flat = y0.clone().detach().view(N, y_dim).requires_grad_(True)
+    logp_flat = -0.5 * (y_flat**2 + math.log(2*math.pi)).sum(dim=1)
     e_ls = get_e_ls(y_flat, num_e)
 
     def net_v(yy, tt):
@@ -229,22 +371,23 @@ def flow_to_sample(model, y0, a, x, device, train=True, nll=False, num_steps=50,
         return torch.where(a==0, vv0, vv1)
 
     def ode_func(t_scalar, z_flat):
-        y_part = z_flat[:N].view(N,1)
-        logp_part = z_flat[N:]
+        y_part = z_flat[:N * y_dim].view(N, y_dim)
         tt = torch.full((N,1), 1 - t_scalar.item(), device=device)
 
         v = net_v(y_part, tt)           # [N,1]
         dy = -v.view(-1)                # [N]
 
         div_est, _ = divergence_approx(v, y_part, e_ls, t=tt, net=net_v)
-        dlogp = -div_est                # [N]
+        # The reverse dynamics are g=-v, so the instantaneous
+        # change-of-variables equation is d log p / ds = -div(g) = div(v).
+        dlogp = div_est                 # [N]
 
         return torch.cat([dy, dlogp], dim=0)
 
     z0 = torch.cat([y_flat.view(-1), logp_flat.view(-1)], dim=0)
-    zT = odeint(ode_func, z0, s, method='dopri5')[-1]
-    y_T = zT[:N].view(N,1)
-    logp_T = zT[N:]
+    zT = odeint(ode_func, z0, s, method='rk4')[-1]
+    y_T = zT[:N * y_dim].view(N, y_dim)
+    logp_T = zT[N * y_dim:]
     return y_T, logp_T
 
 def flow_to_noise(model, y_data, a, x, device, train=True, num_steps=50):
@@ -256,12 +399,13 @@ def flow_to_noise(model, y_data, a, x, device, train=True, num_steps=50):
     """
     s = torch.linspace(0, 1, num_steps, device=device)
     batch_size = y_data.shape[0]
+    y_dim = model.y_dim
     a = a.view(batch_size, 1)
     x = x.view(batch_size, -1)
 
     if train:
         def ode_func(s_scalar, y_flat):
-            y = y_flat.view(batch_size, 1)
+            y = y_flat.view(batch_size, y_dim)
             t_tensor = torch.full((batch_size, 1), s_scalar.item(), device=device)
 
             v0, v1 = model(y, t_tensor, a, x)
@@ -269,14 +413,14 @@ def flow_to_noise(model, y_data, a, x, device, train=True, num_steps=50):
             return v.view(-1)
 
         y0_flat = y_data.view(-1)
-        y_traj_flat = odeint(ode_func, y0_flat, s, method='dopri5')
-        y_traj = y_traj_flat[-1].view(batch_size, 1)
+        y_traj_flat = odeint(ode_func, y0_flat, s, method='rk4')
+        y_traj = y_traj_flat[-1].view(batch_size, y_dim)
         
     else:
         model.eval()
         with torch.no_grad():
             def ode_func(s_scalar, y_flat):
-                y = y_flat.view(batch_size, 1)
+                y = y_flat.view(batch_size, y_dim)
                 t_tensor = torch.full((batch_size, 1), s_scalar.item(), device=device)
 
                 v0, v1 = model(y, t_tensor, a, x)
@@ -284,20 +428,20 @@ def flow_to_noise(model, y_data, a, x, device, train=True, num_steps=50):
                 return v.view(-1)
 
             y0_flat = y_data.view(-1)
-            y_traj_flat = odeint(ode_func, y0_flat, s, method='dopri5')
-            y_traj = y_traj_flat[-1].view(batch_size, 1)
+            y_traj_flat = odeint(ode_func, y0_flat, s, method='rk4')
+            y_traj = y_traj_flat[-1].view(batch_size, y_dim)
 
     return y_traj
 
 
-parser = argparse.ArgumentParser(description='Load hyperparameters from a YAML file.')
-parser.add_argument('--PO_Flow_config', default = 'ACIC2018.yaml', type=str, help='Path to the YAML file')
-
-args_parsed = parser.parse_args()
-with open(args_parsed.PO_Flow_config, 'r') as file:
-    args_yaml = yaml.safe_load(file)
-
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Load hyperparameters from a YAML file.')
+    parser.add_argument('--PO_Flow_config', default='ACIC2018.yaml', type=str,
+                        help='Path to the YAML file')
+    args_parsed = parser.parse_args()
+    with open(args_parsed.PO_Flow_config, 'r') as file:
+        args_yaml = yaml.safe_load(file)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.manual_seed(42)
     np.random.seed(42)
@@ -328,7 +472,7 @@ if __name__ == "__main__":
     for epoch in range(1, n_epochs + 1):
         print(f"Epoch {epoch}")
         train_flow_matching(model, train_loader, optimizer, device, propnet=None)
-        
+
         if epoch % test_epochs == 0:
             print(f"########### Testing at epoch {epoch} ###########")
             model.eval()

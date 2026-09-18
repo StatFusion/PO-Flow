@@ -1,0 +1,74 @@
+# CANONICAL FINAL CONFIG — TARNet and DragonNet scalar/vector adaptations.
+# GPU login/setup (deanonymized):
+#   ssh atl1-1-02-007-31-0
+#   module load anaconda3/2022.05
+#   conda activate /storage/home/hcoda1/3/dwu381/r-yxie77-0/dongze
+#   cd /storage/home/hcoda1/3/dwu381/r-yxie77-0/PO_Flow
+# Complete restart-safe sweep:
+#   bash run_additional_baselines.sh
+# Single run example:
+#   python additional_baselines.py --config configs/vector/IHDP_Vector_d5.yaml --method dragonnet --device cuda --seed 42 --run-name IHDP_Vector_d5_DragonNet_seed42
+# Upstream references audited read-only:
+#   TARNet/CFRNet: https://github.com/clinicalml/cfrnet @ 8fc242edbbd49ba6ff5dbca0201ed9b5bc79c5bb
+#   DragonNet: https://github.com/claudiashi57/dragonnet @ 2e51b2478854df389893bac85430bca5b70f5a26
+
+baselines:
+  tarnet:
+    architecture:
+      representation_hidden_layers: 2
+      outcome_head_hidden_layers: 2
+      activation: elu
+    weight_decay: 0.0001
+    log_every: 20
+    scalar:
+      epochs: 120
+      batch_size: 256
+      hidden_dim: 256
+      learning_rate: 0.001
+    tabular:
+      epochs: 120
+      batch_size: 512
+      hidden_dim: 256
+      learning_rate: 0.001
+    image:
+      epochs: 30
+      batch_size: 512
+      hidden_dim: 512
+      learning_rate: 0.0005
+  dragonnet:
+    architecture:
+      representation_hidden_layers: 3
+      outcome_head_hidden_layers: 2
+      activation: elu
+      propensity_head: linear
+      targeted_epsilon: per_outcome_coordinate
+    weight_decay: 0.0001
+    max_grad_norm: 10.0
+    propensity_strength: 1.0
+    targeted_strength: 1.0
+    propensity_clip: 0.01
+    log_every: 20
+    scalar:
+      epochs: 120
+      batch_size: 256
+      hidden_dim: 256
+      learning_rate: 0.001
+    tabular:
+      epochs: 120
+      batch_size: 512
+      hidden_dim: 256
+      learning_rate: 0.001
+    image:
+      epochs: 30
+      batch_size: 512
+      hidden_dim: 512
+      learning_rate: 0.0005
+evaluation:
+  scalar:
+    batch_size: 512
+  tabular:
+    batch_size: 512
+    sliced_wasserstein_projections: 200
+  image:
+    batch_size: 256
+    sliced_wasserstein_projections: 100
